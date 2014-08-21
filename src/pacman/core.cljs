@@ -51,6 +51,12 @@
     7 {:renderable render-rand}
     8 {:renderable render-rand}
     9 {:renderable render-rand}
+    11 {:renderable render-rand}
+    12 {:renderable render-rand}
+    13 {:renderable render-rand}
+    14 {:renderable render-rand}
+    15 {:renderable render-rand}
+    16 {:renderable render-rand}
     :grid []
       }
     )
@@ -100,21 +106,18 @@
 
 (begin)
 
-
-(defn insert-el
-  [el v]
-  (vec (cons el v))
-  )
-
-(defn wrap-children
-  [el sx]
-  (vec (map #(vec [el %]) sx))
-  )
+(defn prepend-el [el lst]
+  (vec (concat [el] lst)))
 
 (defn to-dom
+  [grid]  
+  (prepend-el :div (map (fn [row] 
+    (prepend-el :div (map vector (repeat :span) row))) grid)))
+
+#_(defn to-dom
   [grid]
   (vec [:div (map (fn [row] 
-         (concat [:div] (map vector (repeat :span) row))) 
+         (insert-el :div (wrap-children :span row))) 
        grid)]
   ))
 

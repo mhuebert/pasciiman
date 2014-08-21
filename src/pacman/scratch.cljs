@@ -6,7 +6,10 @@
      (doseq [e renderables] 
      ; (prn (:name e) )
      )))
-
+(defn to-dom
+  [grid]  
+  (map (fn [row] 
+           (vec (concat [:div] (map vector (repeat :span) row)))) grid))
 ;
 ;(defn renderAll []
 ;  (do
