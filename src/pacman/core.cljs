@@ -9,8 +9,8 @@
 
 (def tick reagent/next-tick)
 
-(def grid-width 60)
-(def grid-height 20)
+(def grid-width 80)
+(def grid-height 24)
 
 
 (defn render-pacman [e] 
@@ -45,23 +45,12 @@
         :renderable render-ghost
        }
     3 {:renderable render-rand}
-    4 {:renderable render-rand}
-    5 {:renderable render-rand}
-    6 {:renderable render-rand}
-    7 {:renderable render-rand}
-    8 {:renderable render-rand}
-    9 {:renderable render-rand}
-    11 {:renderable render-rand}
-    12 {:renderable render-rand}
-    13 {:renderable render-rand}
-    14 {:renderable render-rand}
-    15 {:renderable render-rand}
-    16 {:renderable render-rand}
     :grid []
       }
     )
 
-(def game-state (atom E))
+(def game-state (atom (apply assoc E (interleave (range 4 100) (repeat {:renderable render-rand})))))
+
 
 (defn make-grid 
   "Blank grid of width w and height h"
@@ -101,7 +90,7 @@
        ))
 
 (defn begin []
-  (render E)
+  (render @game-state)
   (tick begin))
 
 (begin)
