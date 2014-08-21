@@ -17,7 +17,7 @@
 
 
 (defn render-pacman [e] 
-  (conj (:position e) [:span "O"]))
+  (conj (:position e) [:span {:style { :background-color "yellow" :color "green"}} "O"]))
 
 (defn render-ghost [e] 
   (conj (:position e) "G")
@@ -32,7 +32,8 @@
     :pacman {
         :name "Pacman"
         :position [0.03 0]
-        :speed 0
+        :speed 5
+        :direction :right
         :points 0
         :alive? true
         :renderable render-pacman
@@ -101,27 +102,34 @@
 
 ; Listen for keyDown. If keyDown matches arrow set,
 ; update Pacman speed/direction/velocity in game state.
-(.addEventListener js/window "keydown" (fn [e] 
-                                          (case (.-which e)
-                                            37 (swap! key-state #(assoc % :left true))
-                                            38 (swap! key-state #(assoc % :up true))
-                                            39 (swap! key-state #(assoc % :right true))
-                                            40 (swap! key-state #(assoc % :down true))
-                                            "default")))
+(.addEventListener js/window "keydown" (fn [e]
+                                            (let [keynum (.-which e)]
+                                              (cond 
+                                                (= keynum 37) (swap! game-state #(assoc-in % [:pacman :direction] :left))
+                                                (= keynum 38) (swap! game-state #(assoc-in % [:pacman :direction] :up))
+                                                (= keynum 39) (swap! game-state #(assoc-in % [:pacman :direction] :right))
+                                                (= keynum 40) (swap! game-state #(assoc-in % [:pacman :direction] :down))
+                                             ))
+                                          ))
 
-(.addEventListener js/window "keyup" (fn [e] 
-                                          (case (.-which e)
-                                            37 (swap! key-state #(assoc % :left false))
-                                            38 (swap! key-state #(assoc % :up false))
-                                            39 (swap! key-state #(assoc % :right false))
-                                            40 (swap! key-state #(assoc % :down false))
-                                            "default")))
+(defn pacman-position [delta {:keys [:position :direction :speed] :as pacman} pacman ]
+  "Returns a new position for pacman given a time delta" 
+    (let [delta (/ delta 1000)
+          movement (* speed delta)
+          [x y] position
+          new-position (case direction
+                         :right [(+ movement x) y]
+                         :left  [(- x movement) y]
+                         :up    [x (- y movement)]
+                         :down  [x (+ movement y)]
+                         position)]
+      (assoc pacman :position new-position)))
 
 
 (defn update 
   [delta state]
-  ;(swap! state )
-  ( )
+  (swap! state #(update-in % [:pacman] (partial pacman-position delta)))
+
   )
 
 ;(let [delta (frame-ms 60)]
@@ -133,6 +141,7 @@
         delta (- now last-update)]
     (update delta game-state)
     (render @game-state)
+    
     (next-tick (partial begin now))))
 
 (begin (js/Date.))
