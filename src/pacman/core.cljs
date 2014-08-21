@@ -2,81 +2,126 @@
   (:require 
     [reagent.core :as reagent :refer [atom]]
     [pacman.random :as random]))
+
+; (:use ["reagent/react.js"])
+
 (enable-console-print!)
 
 (def tick reagent/next-tick)
 
-(defn render [entities]
-  (let [renderables 
-        (filter #(contains? % :renderable) (vals entities))]
-     (doseq [e renderables] 
-     ; (prn (:name e) )
-     )))
+(def grid-width 60)
+(def grid-height 20)
 
-(defn render-pacman [e] )
+
+(defn render-pacman [e] 
+  (conj (:position e) "O")
+  [(rand-int grid-width) (rand-int grid-height) "O"]
+  )
+
+(defn render-ghost [e] 
+  (conj (:position e) "G")
+  [(rand-int grid-width) (rand-int grid-height) "G"]
+  )
+(defn render-rand [n e] 
+  (conj (:position e) n)
+  [(rand-int grid-width) (rand-int grid-height) (random/char)]
+  )
 
 (def E {
     1 {
         :name "Pacman"
-        :position {:x 0 :y 10}
-        :speed {:v 0}
-        :points {:v 0}
-        :alive? {:v true}
-        :renderable {:fn render-pacman}
+        :position [0 0]
+        :speed 0
+        :points 0
+        :alive? true
+        :renderable render-pacman
        }
-    2 "sss"
+    2 {
+        :name "Ghost"
+        :position [0 5]
+        :speed 0
+        :points 0
+        :alive? true
+        :renderable render-ghost
+       }
+    3 {:renderable render-rand}
+    4 {:renderable render-rand}
+    5 {:renderable render-rand}
+    6 {:renderable render-rand}
+    7 {:renderable render-rand}
+    8 {:renderable render-rand}
+    9 {:renderable render-rand}
+    :grid []
       }
     )
 
-; Systems
-(def S [])
-
-; Game-state atom
 (def game-state (atom E))
 
+(defn make-grid 
+  "Blank grid of width w and height h"
+  [w h]
+  (vec(repeat h (vec (take w (repeat " "))))))
 
-(defn renderAll []
-  (do
-    ;(prn (random/string 10))
-    ; (render E)
-    (swap! game-state #(assoc % 2 (random/string 10)))
-    (tick renderAll)))
+(def blank-grid (make-grid grid-width grid-height))
+
+(defn filter-e 
+  "Return all entities which contain keyword"
+  [kw entities]
+  (filter #(contains? % kw) (vals entities)))
+
+(defn render-e
+  [entity]
+  (let [render-fn (:renderable entity)]
+    (render-fn entity)
+  ))
+
+(defn add-to-grid
+  [grid [x y v]]
+  (assoc-in grid [y x] v)
+  )
+
+(defn update-grid
+  [grid]
+  (swap! game-state #(assoc % :grid grid))
+  )
+
+(defn render
+  "Loop through renderable entities and render them."
+  [entities] 
+  (->> (filter-e :renderable entities)
+       (map render-e)
+       (reduce add-to-grid blank-grid)
+       (update-grid)
+       ))
+
+(defn begin []
+  (render E)
+  (tick begin))
+
+(begin)
 
 
+(defn insert-el
+  [el v]
+  (vec (cons el v))
+  )
 
-(renderAll)
+(defn wrap-children
+  [el sx]
+  (vec (map #(vec [el %]) sx))
+  )
 
-(defn game-map [s]
-  [:div s]
-)
+(defn to-dom
+  [grid]
+  (vec [:div (map (fn [row] 
+         (concat [:div] (map vector (repeat :span) row))) 
+       grid)]
+  ))
 
 (defn game-component []
-  [game-map (get @game-state 2)])
+  [to-dom (get @game-state :grid)])
 
 (defn mountit []
   (reagent/render-component [game-component]
                             (.-body js/document)))
 (mountit)
-; (def click-count (atom 0))
-
-; (defn state-ful-with-atom []
-;   [:div {:on-click #(swap! click-count inc)}
-;    "I have been clicked " @click-count " times."])
-
-; (defn some-component []
-;   [:div
-;    [:h3 "I am a component!"]
-;    [:p.someclass 
-;     "I have " [:strong "bold"]
-;     [:span {:style {:color "red"}} " and red"]
-;     " text."]])
-
-; (defn calling-component []
-;   [:div "Parent component"
-;    [some-component]])
-
-; (defn child [name]
-;   [:p "Hi, I am " name])
-
-; (defn childcaller []
-;   [child "Foo Bar"])
