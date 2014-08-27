@@ -3,10 +3,7 @@
   (:require 
     [cljs.core.async :refer [chan alts! <!  close! timeout put!]]
     [reagent.core :as reagent :refer [atom]]
-    [pacman.random :as random]
-    ))
-
-; (:use ["reagent/react.js"])
+    [pacman.random :as random]))
 
 (enable-console-print!)
 
@@ -15,18 +12,40 @@
 (def grid-width 10)
 (def grid-height 10)
 
-
 (defn render-pacman [e] 
   (conj (:position e) [:span {:style { :background-color "yellow" :color "green"}} "O"]))
 
 (defn render-ghost [e] 
   (conj (:position e) "G")
-  [(rand-int grid-width) (rand-int grid-height) [:span "G"]]
-  )
+  [(rand-int grid-width) (rand-int grid-height) [:span "G"]])
+
 (defn render-rand [n e] 
   (conj (:position e) n)
-  [(rand-int grid-width) (rand-int grid-height) [:span (random/char)]]
-  )
+  [(rand-int grid-width) (rand-int grid-height) [:span (random/char)]])
+
+(defn linear-function [[x1 y1]
+                        [x2 y2]]
+  (let [m (/ (- y2 y1) (- x2 x1))
+        b (- y1 (* m x1))]
+    #(+ (* m %) b)))
+
+(declare add-to-grid)
+(defn draw-line [grid {:keys [:points :fill]} line]
+  (let [[lower upper] (sort-by first points)
+         line-fn (linear-function lower upper)
+         xs (range (first lower) (first upper))
+         ys (map line-fn xs)]
+    ;; project the xs using the linear fn into the y axis
+    ;; zip the xs and ys together
+    ;; place the fill at each x y pair
+    (reduce add-to-grid grid (map vector xs ys (repeat fill)))))
+
+(defn render-wall [grid {:keys [:wall-list]} e]
+  "Takes an entity with a :wall-list attribute containing a list of four-element
+   vectors [x1 y1 x2 y2] and draws a line from point (x1, y1) to point (x2, y2)
+   on the given grid and returns a new grid."
+  (reduce draw-line grid wall-list))
+  
 
 (def E {
     :pacman {
@@ -46,12 +65,15 @@
         :alive? true
         :renderable render-ghost
        }
-    3 {:renderable render-rand}
-    :grid []
-      }
-    )
+    :walls {
+            :renderable render-wall
+            :wall-list  [{:points [[4 2] [4 8]]
+                          :fill [:span {:style {:color "red"}}]}]
+           }
+    :grid []})
 
-(def game-state (atom (apply assoc E (interleave (range 4 100) (repeat {:renderable render-rand})))))
+
+(def game-state (atom (apply assoc E (interleave (range 3 100) (repeat {:renderable render-rand})))))
 
 (def key-state (atom {:left false :right false :up false :down false}))
 
@@ -70,18 +92,15 @@
 (defn render-e
   [entity]
   (let [render-fn (:renderable entity)]
-    (render-fn entity)
-  ))
+    (render-fn entity)))
 
 (defn add-to-grid
   [grid [x y v]]
-  (assoc-in grid [y x] v)
-  )
+  (assoc-in grid [y x] v))
 
 (defn update-grid
   [grid]
-  (swap! game-state #(assoc % :grid grid))
-  )
+  (swap! game-state #(assoc % :grid grid)))
 
 (defn render
   "Loop through renderable entities and render them."
@@ -89,30 +108,27 @@
   (->> (filter-e :renderable entities)
        (map render-e)
        (reduce add-to-grid blank-grid)
-       (update-grid)
-       ))
-
+       (update-grid)))
 
 (defn frame-ms
   [fps]
-  (/ 1000 fps)
-  )
-
-
+  (/ 1000 fps))
 
 ; Listen for keyDown. If keyDown matches arrow set,
 ; update Pacman speed/direction/velocity in game state.
-(.addEventListener js/window "keydown" (fn [e]
-                                            (let [keynum (.-which e)]
-                                              (cond 
-                                                (= keynum 37) (swap! game-state #(assoc-in % [:pacman :direction] :left))
-                                                (= keynum 38) (swap! game-state #(assoc-in % [:pacman :direction] :up))
-                                                (= keynum 39) (swap! game-state #(assoc-in % [:pacman :direction] :right))
-                                                (= keynum 40) (swap! game-state #(assoc-in % [:pacman :direction] :down))
-                                             ))
-                                          ))
+(.addEventListener js/window "keydown" 
+  (fn [e]
+    (let [keynum (.-which e)]
+      (cond 
+        (= keynum 37) (swap! game-state #(assoc-in % [:pacman :direction] :left))
+        (= keynum 38) (swap! game-state #(assoc-in % [:pacman :direction] :up))
+        (= keynum 39) (swap! game-state #(assoc-in % [:pacman :direction] :right))
+        (= keynum 40) (swap! game-state #(assoc-in % [:pacman :direction] :down))))))
 
-(defn pacman-position [delta {:keys [:position :direction :speed] :as pacman} pacman ]
+(defn valid-position? [[x y]]
+  (and (>= x 0) (< x grid-width) (>= y 0) (< y grid-height)))
+
+(defn update-pacman-position [delta {:keys [:position :direction :speed] :as pacman} pacman ]
   "Returns a new position for pacman given a time delta" 
     (let [delta (/ delta 1000)
           movement (* speed delta)
@@ -123,18 +139,14 @@
                          :up    [x (- y movement)]
                          :down  [x (+ movement y)]
                          position)]
-      (assoc pacman :position new-position)))
+      (if (valid-position? new-position)
+        (assoc pacman :position new-position)
+        pacman)))
 
 
 (defn update 
   [delta state]
-  (swap! state #(update-in % [:pacman] (partial pacman-position delta)))
-
-  )
-
-;(let [delta (frame-ms 60)]
-;  (js/setInterval (partial update delta game-state) delta)
-;)
+  (swap! state #(update-in % [:pacman] (partial update-pacman-position delta))))
 
 (defn begin [last-update]
   (let [now (.getTime (js/Date.))
@@ -152,7 +164,7 @@
                (map 
                  (fn [row] 
                       (vec (concat [:div] row))) 
-                grid))))
+                 grid))))
 
 
 (defn game-component []
