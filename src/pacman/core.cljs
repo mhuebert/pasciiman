@@ -3,8 +3,7 @@
   (:require 
     [cljs.core.async :refer [chan alts! <!  close! timeout put!]]
     [reagent.core :as reagent :refer [atom]]
-    [pacman.random :as random]
-    ))
+    [pacman.random :as random]))
 
 (enable-console-print!)
 
@@ -24,6 +23,30 @@
   (conj (:position e) n)
   [(rand-int grid-width) (rand-int grid-height) [:span (random/char)]])
 
+(defn linear-function [[x1 y1]
+                        [x2 y2]]
+  (let [m (/ (- y2 y1) (- x2 x1))
+        b (- y1 (* m x1))]
+    #(+ (* m %) b)))
+
+(declare add-to-grid)
+(defn draw-line [grid {:keys [:points :fill]} line]
+  (let [[lower upper] (sort-by first points)
+         line-fn (linear-function lower upper)
+         xs (range (first lower) (first upper))
+         ys (map line-fn xs)]
+    ;; project the xs using the linear fn into the y axis
+    ;; zip the xs and ys together
+    ;; place the fill at each x y pair
+    (reduce add-to-grid grid (map vector xs ys (repeat fill)))))
+
+(defn render-wall [grid {:keys [:wall-list]} e]
+  "Takes an entity with a :wall-list attribute containing a list of four-element
+   vectors [x1 y1 x2 y2] and draws a line from point (x1, y1) to point (x2, y2)
+   on the given grid and returns a new grid."
+  (reduce draw-line grid wall-list))
+  
+
 (def E {
     :pacman {
         :name "Pacman"
@@ -42,7 +65,13 @@
         :alive? true
         :renderable render-ghost
        }
+    :walls {
+            :renderable render-wall
+            :wall-list  [{:points [[4 2] [4 8]]
+                          :fill [:span {:style {:color "red"}}]}]
+           }
     :grid []})
+
 
 (def game-state (atom (apply assoc E (interleave (range 3 100) (repeat {:renderable render-rand})))))
 
@@ -96,7 +125,7 @@
         (= keynum 39) (swap! game-state #(assoc-in % [:pacman :direction] :right))
         (= keynum 40) (swap! game-state #(assoc-in % [:pacman :direction] :down))))))
 
-(defn valid-position? [[x y] point]
+(defn valid-position? [[x y]]
   (and (>= x 0) (< x grid-width) (>= y 0) (< y grid-height)))
 
 (defn update-pacman-position [delta {:keys [:position :direction :speed] :as pacman} pacman ]
