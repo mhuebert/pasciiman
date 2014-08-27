@@ -7,7 +7,8 @@
                  [org.clojure/core.async "0.1.338.0-5c5012-alpha"]
                  [reagent "0.4.2"]]
 
-  :plugins [[lein-cljsbuild "1.0.4-SNAPSHOT"]]
+  :plugins [[lein-cljsbuild "1.0.4-SNAPSHOT"] 
+            [lein-marginalia "0.7.1"]]
 
   :source-paths ["src"]
 
