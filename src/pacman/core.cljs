@@ -96,7 +96,10 @@
         (= keynum 39) (swap! game-state #(assoc-in % [:pacman :direction] :right))
         (= keynum 40) (swap! game-state #(assoc-in % [:pacman :direction] :down))))))
 
-(defn pacman-position [delta {:keys [:position :direction :speed] :as pacman} pacman ]
+(defn valid-position? [[x y] point]
+  (and (>= x 0) (< x grid-width) (>= y 0) (< y grid-height)))
+
+(defn update-pacman-position [delta {:keys [:position :direction :speed] :as pacman} pacman ]
   "Returns a new position for pacman given a time delta" 
     (let [delta (/ delta 1000)
           movement (* speed delta)
@@ -107,12 +110,14 @@
                          :up    [x (- y movement)]
                          :down  [x (+ movement y)]
                          position)]
-      (assoc pacman :position new-position)))
+      (if (valid-position? new-position)
+        (assoc pacman :position new-position)
+        pacman)))
 
 
 (defn update 
   [delta state]
-  (swap! state #(update-in % [:pacman] (partial pacman-position delta))))
+  (swap! state #(update-in % [:pacman] (partial update-pacman-position delta))))
 
 (defn begin [last-update]
   (let [now (.getTime (js/Date.))
