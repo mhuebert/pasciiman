@@ -4,57 +4,89 @@
     [cljs.core.async :refer [chan alts! <!  close! timeout put!]]
     [reagent.core :as reagent :refer [atom]]
     [pacman.random :as random]
-    [pacman.geometry :as geometry]
     [clojure.browser.repl :as repl]))
 
 ;(repl/connect "http://localhost:9000/repl")
-;(enable-console-print!)
- 
+(enable-console-print!)
 
 (def next-tick reagent/next-tick)
 
 (def grid-width 10)
 (def grid-height 10)
 
-(defn render-pacman [e] 
-  (conj (:position e) [:span {:style { :background-color "yellow" :color "green"}} "O"]))
-
-(defn render-ghost [e] 
-  (conj (:position e) "G")
-  [(rand-int grid-width) (rand-int grid-height) [:span "G"]])
-
-(defn render-rand [n e] 
-  (conj (:position e) n)
-  [(rand-int grid-width) (rand-int grid-height) [:span (random/char)]])
-
-(defn make-grid 
-  "Blank grid of width w and height h"
-  [w h]
-  (vec(repeat h (vec (take w (repeat [:span " "]))))))
-
-(def blank-grid (make-grid grid-width grid-height))
-
-(defn linear-constants [[x1 y1]
-                        [x2 y2]]
-  (let [m (/ (- y2 y1) (- x2 x1))
-        b (- y1 (* m x1))]
-    [m b]
-    ))
-
 (defn add-to-grid
   [grid [x y v]]
   (assoc-in grid [y x] v))
 
+(defn render-pacman [grid e] 
+  (add-to-grid grid (conj (:position e) [:span {:style { :background-color "yellow" :color "green"}} "O"])))
 
-(draw-line blank-grid {:points [[1 1] [5 5]] :fill [:div "X"]})
+(defn render-ghost [grid e] 
+  (add-to-grid grid [(rand-int grid-width) (rand-int grid-height) [:span {} "G"]]))
 
-(defn render-wall [grid {:keys [:wall-list]} e]
-  "Takes an entity with a :wall-list attribute containing a list of four-element
-   vectors [x1 y1 x2 y2] and draws a line from point (x1, y1) to point (x2, y2)
+(defn render-rand [grid e] 
+  (add-to-grid grid [(rand-int grid-width) (rand-int grid-height) [:span {} (random/char)]]))
+
+(defn make-grid 
+  "Blank grid of width w and height h"
+  [w h]
+  (vec(repeat h (vec (take w (repeat [:span {} " "]))))))
+
+(def blank-grid (make-grid grid-width grid-height))
+
+
+
+(defn interpolate
+  "Find intermediate value given two values and the fraction in-between"
+  [v1 v2 r]
+  (+ v1 (* r (- v2 v1)))
+)
+
+(defn interpolate-point
+  "Find intermediate point given two points and fraction in-between"
+  [[x1 y1] [x2 y2] r]
+  (vector (Math/round (interpolate x1 x2 r)) (Math/round (interpolate y1 y2 r))) 
+)
+
+(defn line
+  "Returns a region (a list of points)"
+  [[x1 y1] [x2 y2]]
+  (let [num-intervals (max (Math/abs (- x2 x1)) (Math/abs (- y2 y1)))]
+    (map #(interpolate-point [x1 y1] [x2 y2] (/ % num-intervals)) (range num-intervals))
+))
+
+(defn transform-component
+  "Transform component with style and fill functions"
+  [component style-fn fill-fn]
+  (vector (first component) (style-fn (second component)) (fill-fn (last component)))
+)
+
+(comment 
+  (transform-component 
+    [:span {:color "red"} "hello"] #(assoc % :color "blue") random/char))
+
+
+(defn render-layer
+  "put a layer on the grid"
+  [grid {:keys [:region :style :fill]}]
+  ; create a function that will apply fill and style functions to 
+  ; the correct parts of a reagent component (eg/ [:span {..style..} "..fill.."]) 
+  (reduce (fn [grid [x y]] 
+              (update-in grid [y x] transform-component style fill)) 
+           grid region))
+
+(defn render-layers [grid {:keys [:layers]}]
+  "Takes an entity with a :layers attribute containing a list of render and draws a line from point (x1, y1) to point (x2, y2)
    on the given grid and returns a new grid."
-  (reduce draw-line grid wall-list))
-  
+   (reduce render-layer grid layers))
 
+;(render-layers blank-grid (:walls E))
+#_(render-layer 
+  blank-grid 
+  {:region (line [4 2] [4 8]) 
+   :style #(assoc % :color "red") 
+   :fill random/char})
+ 
 (def E {
     :pacman {
         :name "Pacman"
@@ -63,7 +95,7 @@
         :direction :right
         :points 0
         :alive? true
-        :renderable render-pacman
+        :render render-pacman
        }
     2 {
         :name "Ghost"
@@ -71,20 +103,21 @@
         :speed 0
         :points 0
         :alive? true
-        :renderable render-ghost
+        :render render-ghost
        }
-    :walls {}#_{
-            :renderable render-wall
-            :wall-list  [{:points [[4 2] [4 8]]
-                          :fill [:span {:style {:color "red"}}]}]
+    :walls {
+            :name "Walls"
+            :render render-layers
+            :layers  [
+                       {:region (line [4 2] [4 8]) :style #(assoc % :color "red") :fill random/char}
+                     ]
            }
     :grid []})
 
-(def game-state (atom (apply assoc E (interleave (range 3 100) (repeat {:renderable render-rand})))))
+;(def game-state (atom (apply assoc E (interleave (range 3 100) (repeat {:render render-rand})))))
+(def game-state (atom E))
 
 (def key-state (atom {:left false :right false :up false :down false}))
-
-
 
 (defn filter-e 
   "Return all entities which contain keyword"
@@ -92,23 +125,20 @@
   (filter #(contains? % kw) (vals entities)))
 
 (defn render-e
-  [entity]
-  (let [render-fn (:renderable entity)]
-    (render-fn entity)))
-
-
+  [grid entity]
+  (let [render (:render entity)]
+    (render grid entity)))
 
 (defn update-grid
   [grid]
   (swap! game-state #(assoc % :grid grid)))
 
 (defn render
-  "Loop through renderable entities and render them."
-  [entities] 
-  (->> (filter-e :renderable entities)
-       (map render-e)
-       (reduce add-to-grid blank-grid)
-       (update-grid)))
+  "Loop through render entities and render them."
+  [entities]
+  (let [entities (filter-e :render entities)]
+      (update-grid (reduce render-e blank-grid entities))
+ ))
 
 (defn frame-ms
   [fps]
